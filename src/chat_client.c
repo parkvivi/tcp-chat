@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <time.h>
 
 #define BUFFER_SIZE 1024
 
@@ -88,6 +89,7 @@ int main(int argc, char *argv[]) {
     char name[32];
     char buffer[BUFFER_SIZE];
     pthread_t receiver;
+    clock_t start, end;
 
     if (argc != 3) {
         fprintf(stderr, "Uso: %s <IP> <porta>\n", argv[0]);
@@ -165,20 +167,25 @@ int main(int argc, char *argv[]) {
 
     printf("Conectado! Digite /quit para sair.\n");
 
-    while (1) {
-        pthread_mutex_lock(&output_mutex);
-        printf("> ");
-        fflush(stdout);
-        pthread_mutex_unlock(&output_mutex);
+    start = clock();
+    end = clock();
 
-        if (fgets(buffer, sizeof(buffer), stdin) == NULL)
+    while (((double)(end - start)/CLOCKS_PER_SEC) <= 10) {
+        //pthread_mutex_lock(&output_mutex);
+        //printf("> ");
+        //fflush(stdout);
+        //pthread_mutex_unlock(&output_mutex);
+
+        /*if (fgets(buffer, sizeof(buffer), stdin) == NULL)
             break;
 
         if (strcmp(buffer, "/quit\n") == 0 ||
             strcmp(buffer, "/quit") == 0) {
             send_all(sockfd, "/quit\n", 6);
             break;
-        }
+        }*/
+
+        strcpy(buffer, "oiie\n");
 
         size_t len = strlen(buffer);
 
@@ -194,6 +201,8 @@ int main(int argc, char *argv[]) {
             perror("send");
             break;
         }
+
+        end = clock();
     }
 
     shutdown(sockfd, SHUT_RDWR);
