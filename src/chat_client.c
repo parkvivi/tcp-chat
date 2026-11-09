@@ -129,19 +129,16 @@ int main(int argc, char *argv[]) {
     unsigned long long total_bytes_sent = 0;
     double elapsed_time = 0.0;
 
-    while (1) {
-        clock_gettime(CLOCK_MONOTONIC, &current_time);
-        elapsed_time = (current_time.tv_sec - start_time.tv_sec) + (current_time.tv_nsec - start_time.tv_nsec) / 1e9;
-
-        if (elapsed_time >= duration)
-            break;
-
+    while (elapsed_time < duration) {
         if (send_all(sockfd, buffer, msg_len) == -1) {
             perror("send");
             break;
         }
 
         total_bytes_sent += msg_len;
+
+        clock_gettime(CLOCK_MONOTONIC, &current_time);
+        elapsed_time = (current_time.tv_sec - start_time.tv_sec) + (current_time.tv_nsec - start_time.tv_nsec) / 1e9;
     }
 
     shutdown(sockfd, SHUT_RDWR);
