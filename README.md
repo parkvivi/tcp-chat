@@ -14,11 +14,11 @@ Atividade da disciplina Redes de Computadores ministrada em 2s2026 no ICT Unifes
 * Servidor
 
 ```bash
-gcc -Wall -Wextra -g src/chat_server.c -o build/chat_server -pthread && ./build/chat_server 5000
+gcc gcc -Wall -Wextra -O2 -pthread src/chat_server.c -o build/chat_server && ./build/chat_server 8080
 ```
 
-* Cliente
+* Script de automação dos clientes
 
 ```bash
-gcc -Wall -Wextra -g src/chat_client.c -o build/chat_client -pthread && ./build/chat_client 127.0.0.1 5000
+chmod +x run_experiments.sh && ./run_experiments.sh
 ```
