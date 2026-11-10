@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,14 +14,15 @@
 
 typedef struct Client {
     int fd;
+    int id;
     char name[32];
-    struct Client *next;
 } Client;
 
-Client *clients = NULL;
 int num_clients = 0;
 
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+unsigned long long total_bytes_received_client[10] = {0};
 
 /* Envia todos os bytes, mesmo se send() enviar parcialmente. */
 int send_all(int fd, const char *data, size_t len) {
@@ -47,64 +47,33 @@ int send_all(int fd, const char *data, size_t len) {
     return 0;
 }
 
-/* Le uma linha terminada por '\n'. */
-ssize_t read_line(int fd, char *buffer, size_t capacity) {
-    size_t pos = 0;
+/* Le nome do cliente. */
+ssize_t read_name(int fd, char *buffer, size_t capacity) {
+    char nome[10] = {0};
+    size_t received = 0;
 
-    while (pos < capacity - 1) {
-        char c;
-        ssize_t n = recv(fd, &c, 1, 0);
-
-        if (n == 0)
-            return pos == 0 ? 0 : (ssize_t)pos;
-
-        if (n == -1) {
-            if (errno == EINTR)
+    while (received < 9) {
+        ssize_t n = recv(fd, nome + received, 9 - received, 0);
+        if (n <= 0) {
+            if (n == -1 && errno == EINTR)
                 continue;
-            return -1;
+            return n;
         }
-
-        if (c == '\n')
-            break;
-
-        if (c != '\r')
-            buffer[pos++] = c;
+        received += (size_t)n;
     }
 
-    buffer[pos] = '\0';
-    return (ssize_t)pos;
-}
+    nome[9] = '\0';
+    snprintf(buffer, capacity, "%s", nome);
 
-/* Distribui uma mensagem aos demais clientes. */
-void broadcast(const char *message, Client *sender) {
-    pthread_mutex_lock(&clients_mutex);
-
-    Client *current = clients;
-
-    while (current != NULL) {
-        if (current != sender) {
-            if (send_all(current->fd, message,
-                         strlen(message)) == -1) {
-                fprintf(stderr,
-                        "Falha ao enviar para %s.\n",
-                        current->name);
-            }
-        }
-
-        current = current->next;
-    }
-
-    pthread_mutex_unlock(&clients_mutex);
+    return 9;
 }
 
 void *handle_client(void *arg) {
     Client *client = arg;
     char buffer[BUFFER_SIZE];
-    char message[BUFFER_SIZE + 64];
-    int registered = 0;
 
     /* A primeira linha recebida e o nome do usuario. */
-    ssize_t n = read_line(client->fd, buffer, sizeof(buffer));
+    ssize_t n = read_name(client->fd, buffer, sizeof(buffer));
 
     if (n <= 0 || buffer[0] == '\0') {
         close(client->fd);
@@ -112,8 +81,7 @@ void *handle_client(void *arg) {
         return NULL;
     }
 
-    snprintf(client->name, sizeof(client->name),
-             "%s", buffer);
+    snprintf(client->name, sizeof(client->name), "%s", buffer);
 
     pthread_mutex_lock(&clients_mutex);
 
@@ -127,56 +95,26 @@ void *handle_client(void *arg) {
         return NULL;
     }
 
-    client->next = clients;
-    clients = client;
+    sscanf(client->name, "Cliente_%d", &client->id);
+    total_bytes_received_client[client->id] = 0;
     num_clients++;
-    registered = 1;
 
     pthread_mutex_unlock(&clients_mutex);
 
-    snprintf(message, sizeof(message),
-             "*** %s entrou no chat. ***\n",
-             client->name);
-    broadcast(message, client);
-
     printf("Usuario conectado: %s\n", client->name);
 
-    while ((n = read_line(client->fd, buffer,
-                          sizeof(buffer))) > 0) {
-        if (strcmp(buffer, "/quit") == 0)
-            break;
-
-        snprintf(message, sizeof(message),
-                 "%s: %s\n", client->name, buffer);
-
-        broadcast(message, client);
+    while ((n = recv(client->fd, buffer, sizeof(buffer), 0)) > 0) { // recebendo mensagens!!
+        total_bytes_received_client[client->id] += (size_t)n;
     }
 
     if (n == -1)
         perror("recv");
 
-    if (registered) {
-        pthread_mutex_lock(&clients_mutex);
+    printf("Usuario desconectado: %s | Total enviado: %llu bytes\n", client->name, total_bytes_received_client[client->id]);
 
-        Client **current = &clients;
-
-        while (*current != NULL && *current != client)
-            current = &(*current)->next;
-
-        if (*current == client) {
-            *current = client->next;
-            num_clients--;
-        }
-
-        pthread_mutex_unlock(&clients_mutex);
-
-        snprintf(message, sizeof(message),
-                 "*** %s saiu do chat. ***\n",
-                 client->name);
-        broadcast(message, NULL);
-    }
-
-    printf("Usuario desconectado: %s\n", client->name);
+    pthread_mutex_lock(&clients_mutex);
+    num_clients--;
+    pthread_mutex_unlock(&clients_mutex);
 
     close(client->fd);
     free(client);
@@ -205,16 +143,14 @@ int main(int argc, char *argv[]) {
     }
 
     int opt = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR,
-               &opt, sizeof(opt));
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     server_addr.sin_port = htons(port);
 
-    if (bind(server_fd, (struct sockaddr *)&server_addr,
-             sizeof(server_addr)) == -1) {
+    if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         perror("bind");
         close(server_fd);
         return EXIT_FAILURE;
@@ -256,12 +192,10 @@ int main(int argc, char *argv[]) {
 
         client->fd = client_fd;
         client->name[0] = '\0';
-        client->next = NULL;
 
         pthread_t tid;
 
-        if (pthread_create(&tid, NULL,
-                           handle_client, client) != 0) {
+        if (pthread_create(&tid, NULL, handle_client, client) != 0) {
             fprintf(stderr, "Erro ao criar thread.\n");
             close(client_fd);
             free(client);

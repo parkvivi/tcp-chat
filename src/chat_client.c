@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -107,7 +106,7 @@ int main(int argc, char *argv[]) {
     }
 
     // envio do nome do cliente
-    if (send_all(sockfd, name, strlen(name)) == -1 || send_all(sockfd, "\n", 1) == -1) {
+    if (send_all(sockfd, name, strlen(name)) == -1) {
         perror("send");
         close(sockfd);
         return EXIT_FAILURE;

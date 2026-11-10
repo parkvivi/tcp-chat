@@ -25,7 +25,7 @@ for c in $(seq 1 $MAX_CLIENTES); do
         CURRENT_DIR="$LOG_DIR/c${c}_r${r}"
         mkdir -p "$CURRENT_DIR"
         
-        for i in $(seq 1 $c); do
+        for i in $(seq 0 $((c - 1))); do
             ./build/chat_client $IP $PORT "Cliente_$i" > "$CURRENT_DIR/client_$i.log" 2>&1 &
         done
         
