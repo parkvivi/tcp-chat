@@ -14,7 +14,7 @@ Atividade da disciplina Redes de Computadores ministrada em 2s2026 no ICT Unifes
 * Servidor
 
 ```bash
-gcc -Wall -Wextra -O2 -pthread src/chat_server.c -o build/chat_server && ./build/chat_server 8080
+gcc -Wall -Wextra -O2 -pthread src/chat_server.c -o build/chat_server && ./build/chat_server 8080 | tee build/server_live.log
 ```
 
 * Script de automação dos clientes
