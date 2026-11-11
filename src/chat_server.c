@@ -8,6 +8,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #define BUFFER_SIZE 1024
 #define MAX_CLIENTS 100
@@ -23,6 +24,13 @@ int num_clients = 0;
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 unsigned long long total_bytes_received_client[10] = {0};
+
+// Variaveis para medir o throughput agregado da rodada
+unsigned long long total_bytes_received = 0;
+int clientes_na_rodada = 0;
+int numero_rodada = 0;
+
+struct timespec tempo_inicio, tempo_final;
 
 /* Envia todos os bytes, mesmo se send() enviar parcialmente. */
 int send_all(int fd, const char *data, size_t len) {
@@ -97,7 +105,17 @@ void *handle_client(void *arg) {
 
     sscanf(client->name, "Cliente_%d", &client->id);
     total_bytes_received_client[client->id] = 0;
+    
+    if (num_clients == 0) {
+        total_bytes_received = 0;
+        clientes_na_rodada = 0;
+        numero_rodada++;
+
+        clock_gettime(CLOCK_MONOTONIC, &tempo_inicio);
+    }
+
     num_clients++;
+    clientes_na_rodada++;
 
     pthread_mutex_unlock(&clients_mutex);
 
@@ -114,6 +132,19 @@ void *handle_client(void *arg) {
 
     pthread_mutex_lock(&clients_mutex);
     num_clients--;
+    total_bytes_received += total_bytes_received_client[client->id];
+
+    if (num_clients == 0) { // ultimo cliente saiu!
+        clock_gettime(CLOCK_MONOTONIC, &tempo_final);
+
+        double tempo_total = (tempo_final.tv_sec - tempo_inicio.tv_sec) + (tempo_final.tv_nsec - tempo_inicio.tv_nsec) / 1e9;
+
+        double throughput = (total_bytes_received * 8.0) / (tempo_total * 1e6);
+
+        printf("\nRecebidos: %llu bytes | Tempo: %.3f | Throughput: %.3f\n", total_bytes_received, tempo_total, throughput);
+        fflush(stdout);
+    }
+
     pthread_mutex_unlock(&clients_mutex);
 
     close(client->fd);
@@ -163,6 +194,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Chat TCP ativo na porta %d.\n", port);
+    fflush(stdout);
 
     while (1) {
         struct sockaddr_in client_addr;
